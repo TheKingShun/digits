@@ -1,0 +1,95 @@
+import numpy as np
+import pandas as pd
+from time import time
+import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import train_test_split
+from sklearn import svm
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import MinMaxScaler
+
+train = pd.read_csv('E:\digit-recognizer\\train.csv')
+test = pd.read_csv('E:\digit-recognizer\\test.csv')
+# # 查看训练集信息
+# print(train.info())
+# # 查看测试集
+# print(test.info())
+# print(train.isnull().any().describe())
+# print(test.isnull().any().describe())
+
+# 将训练集中的特征和标签列分开
+X = train.iloc[:,1:]
+y = train.iloc[:,0]
+# 查看训练集的数字
+# plt.figure(figsize = (10,5))
+# for num in range(10):
+#     plt.subplot(2,5,num+1)
+#     #将长度为784的向量数据转化为28*28的矩阵
+#     grid_data = X.iloc[num].values.reshape(28,28)
+#     #对图像进行处理，并显示其格式,默认颜色为黑色
+#     plt.imshow(grid_data, interpolation = "none", cmap = "Greys")
+#     #显示图片
+#     plt.show()
+
+# 特征预处理,将特征的值域规范化
+X = MinMaxScaler().fit_transform(X)
+test = MinMaxScaler().fit_transform(test)
+
+# 分开训练集和测试集
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.1, random_state = 14)
+# 使用主成分分析,降低维度
+all_scores = []
+# 生成n_components的取值列表
+n_components = np.linspace(0.7,0.9,num=20, endpoint=False)
+
+def get_accuracy_score(n, X_train, X_test, y_train, y_test):
+    '''当主成分为n时,计算模型预测的准确率'''
+    t0 = time()
+    pca = PCA(n_components = n)
+    pca.fit(X_train)
+    X_train_pca = pca.transform(X_train)
+    X_test_pca = pca.transform(X_test)
+    # 使用支持向量机分类器
+    clf = svm.SVC()
+    clf.fit(X_train_pca, y_train)
+    # 计算准确度
+    accuracy = clf.score(X_test_pca, y_test)
+    t1 = time()
+    print('n_components:{:.2f} , accuracy:{:.4f} , time elaps:{:.2f}s'.format(n, accuracy, t1-t0))
+    return accuracy
+
+for n in n_components:
+    score = get_accuracy_score(n,X_train, X_test, y_train, y_test)
+    all_scores.append(score)
+
+plt.plot(n_components, all_scores, '-o')
+plt.xlabel('n_components')
+plt.ylabel('accuracy')
+plt.show()
+
+# # n_components为0.84时, 模型的准确率最高
+# 对训练集和测试集进行PCA降低维度处理
+pca = PCA(n_components=0.84)
+pca.fit(X)
+# 打印主成分个数
+print(pca.n_components_)
+# 对训练集和测试集进行主成分转换
+X = pca.transform(X)
+test = pca.transform(test)
+
+
+# 使用支持向量机预测,使用网格搜索进行调参
+clf_svc = GridSearchCV(estimator=svm.SVC(),
+                       param_grid={ 'C': [1, 2, 4, 5], 'kernel': [ 'linear', 'rbf', 'sigmoid' ] },
+                       cv=5,
+                       verbose=2 )
+#运行网格搜索
+clf_svc.fit(X, y)
+
+# 预测
+preds = clf_svc.predict(test)
+image_id = pd.Series(range(1,len(preds)+1))
+result_2 = pd.DataFrame({'ImageID': image_id,'Label':preds})
+# 保存为CSV文件
+result_2.to_csv('result_svc.csv',index = False)
+print('Done')
